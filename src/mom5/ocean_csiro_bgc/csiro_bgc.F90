@@ -221,8 +221,17 @@ integer                                 :: package_index
 integer :: id_po4, id_dic, id_alk, id_o2, id_no3, id_phy, id_det, id_zoo &
       , id_caco3, id_adic, id_fe, id_caco3_sediment, id_det_sediment
 ! internal pointer to make reading the code easier
-integer :: ind_po4, ind_dic, ind_alk, ind_o2, ind_no3, ind_phy, ind_det, ind_zoo &
-      , ind_caco3, ind_adic, ind_fe
+integer,public :: ind_po4 = -1
+integer,public :: ind_dic = -1 
+integer,public :: ind_alk = -1
+integer,public :: ind_o2 = -1
+integer,public :: ind_no3 = -1
+integer,public :: ind_phy = -1
+integer,public :: ind_det = -1
+integer,public :: ind_zoo = -1
+integer,public :: ind_caco3 = -1
+integer,public :: ind_adic = -1
+integer,public :: ind_fe = -1
 character*6  :: qbio_model
 integer      :: bio_version    ! version of the bgc module to use
 logical      :: zero_floor     ! apply hard floor to bgc tracers 
@@ -238,6 +247,23 @@ character*128                           :: atmpress_file
 character*32                            :: atmpress_name    
 real, allocatable, dimension(:,:)       :: fice_t
 integer                                 :: id_light_limit = -1
+integer                                 :: id_adic_intmld = -1
+integer                                 :: id_dic_intmld = -1
+integer                                 :: id_o2_intmld = -1
+integer                                 :: id_no3_intmld = -1
+integer                                 :: id_fe_intmld = -1
+integer                                 :: id_phy_intmld = -1
+integer                                 :: id_det_intmld = -1
+integer                                 :: id_pprod_gross_intmld = -1
+integer                                 :: id_npp_intmld = -1
+integer                                 :: id_radbio_intmld = -1
+integer                                 :: id_wdet100avg = -1
+integer                                 :: id_radbio1 = -1
+integer                                 :: id_radbio3d = -1
+integer                                 :: id_wdet100 = -1
+integer                                 :: id_npp1 = -1
+integer                                 :: id_npp2d = -1
+integer                                 :: id_npp3d = -1
 integer                                 :: id_pprod_gross = -1
 integer                                 :: id_pprod_gross_2d = -1
 integer                                 :: id_zprod_gross = -1
@@ -303,6 +329,12 @@ real, allocatable, dimension(:) :: fmin_poc
 real, allocatable, dimension(:) :: fmin_pic
 real, allocatable, dimension(:,:,:) :: biotr
 real, allocatable, dimension(:,:) :: light_limit
+real, allocatable, dimension(:,:) :: adic_intmld,dic_intmld,o2_intmld,no3_intmld,fe_intmld,phy_intmld,det_intmld
+real, allocatable, dimension(:,:) :: pprod_gross_intmld,npp_intmld,radbio_intmld,wdet100avg
+real, allocatable, dimension(:,:,:) :: radbio3d
+real, allocatable, dimension(:,:) :: wdet100
+real, allocatable, dimension(:,:) :: npp2d
+real, allocatable, dimension(:,:,:) :: npp3d
 real, allocatable, dimension(:,:,:) :: pprod_gross
 real, allocatable, dimension(:,:) :: pprod_gross_2d
 real, allocatable, dimension(:,:,:) :: zprod_gross
@@ -451,6 +483,20 @@ allocate( fmin_pic(nk) )
 allocate( ray(nk) )
 allocate( biotr(isc:iec,nk,ntr_bgc) )
 allocate( light_limit(isc:iec,jsc:jec) )
+allocate( adic_intmld(isc:iec,jsc:jec) )
+allocate( dic_intmld(isc:iec,jsc:jec) )
+allocate( o2_intmld(isc:iec,jsc:jec) )
+allocate( no3_intmld(isc:iec,jsc:jec) )
+allocate( phy_intmld(isc:iec,jsc:jec) )
+allocate( det_intmld(isc:iec,jsc:jec) )
+allocate( pprod_gross_intmld(isc:iec,jsc:jec) )
+allocate( npp_intmld(isc:iec,jsc:jec) )
+allocate( radbio_intmld(isc:iec,jsc:jec) )
+allocate( wdet100avg(isc:iec,jsc:jec) )
+allocate( radbio3d(isc:iec,jsc:jec,nk) )
+allocate( wdet100(isc:iec,jsc:jec) )
+allocate( npp2d(isc:iec,jsc:jec) )
+allocate( npp3d(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross(isc:iec,jsc:jec,nk) )
 allocate( pprod_gross_2d(isc:iec,jsc:jec) )
 allocate( zprod_gross(isc:iec,jsc:jec,nk) )
@@ -842,7 +888,7 @@ end subroutine  csiro_bgc_end  !}
 !
 
 subroutine csiro_bgc_sbc(isc, iec, jsc, jec, isd, ied, jsd, jed, &
-    T_prog, aice, wnd, grid, time, use_waterflux, salt_restore_as_salt_flux, atm_co2, co2flux, sfc_co2)
+    T_prog, aice, wnd, grid, time, use_waterflux, salt_restore_as_salt_flux, atm_co2, co2flux, sfc_co2, iof_nit, iof_alg)
 
 use ocmip2_co2calc_mod
 use mpp_mod, only : mpp_sum
@@ -859,6 +905,7 @@ type(ocean_prog_tracer_type), dimension(:), intent(inout)       :: T_prog
 type(ocean_grid_type), intent(in)                               :: Grid
 type(ocean_time_type), intent(in)                               :: Time
 real, intent(in), dimension(isd:ied,jsd:jed)                    :: aice, wnd
+real, intent(in), dimension(isd:ied,jsd:jed), optional          :: iof_nit, iof_alg
 logical, intent(in) :: use_waterflux, salt_restore_as_salt_flux
 
 real, intent(in), dimension(isd:ied,jsd:jed), optional          :: atm_co2
@@ -947,7 +994,13 @@ else
 endif ! if (gasx_from_file)
 
 call time_interp_external(nat_co2_id, time%model_time, nat_co2)
-call time_interp_external(atmpress_id, time%model_time, patm_t)
+if (gasx_from_file) then
+        call time_interp_external(atmpress_id, time%model_time, patm_t)
+else !use the sea level pressure from the forcing (convert Pa to atm)
+        !THIS HAS NOT BEEN IMPLEMENTED YET. READ INPUT FILE FOR NOW...
+        call time_interp_external(atmpress_id, time%model_time, patm_t)
+        !patm_t(isc:iec,jsc:jec) = patm(isc:iec,jsc:jec)/101325
+endif
 call time_interp_external(dust_id, time%model_time, dust_t)
 if (id_adic .ne. 0) then
 ! The atmospheric co2 value for the anthropogenic+natural carbon tracer
@@ -1873,6 +1926,35 @@ if (id_pprod_gross_2d .gt. 0) then
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
 endif
 
+!det export at 100 m
+if (id_wdet100 .gt. 0) then
+  wdet100(:,:) = wdetbio(isc:iec,jsc:jec)*t_prog(ind_det)%field(isc:iec,jsc:jec,minloc(grid%zt(:)-100,dim=1),time%taum1)
+  used = send_data(id_wdet100, wdet100(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+
+! Net primary productivity
+
+! at each depth
+if (id_npp3d .gt. 0) then
+  used = send_data(id_npp3d, npp3d(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
+endif
+! depth integrated
+if (id_npp2d .gt. 0) then
+  npp2d(:,:)=0.0
+  do k=1,grid%nk
+        npp2d(isc:iec,jsc:jec) = npp2d(isc:iec,jsc:jec) + npp3d(isc:iec,jsc:jec,k)*Thickness%dzt(isc:iec,jsc:jec,k)
+  enddo
+  used = send_data(id_npp2d, npp2d(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+! at surface
+if (id_npp1 .gt. 0) then
+  used = send_data(id_npp1, npp3d(isc:iec,jsc:jec,1),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+
 ! Gross production of zooplankton
 
 if (id_zprod_gross .gt. 0) then
@@ -1885,6 +1967,69 @@ endif
 if (id_light_limit .gt. 0) then
   used = send_data(id_light_limit, light_limit(isc:iec,jsc:jec),          &
        time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+
+! mixed-layer-integrated quantities
+
+if (id_adic_intmld .gt. 0) then
+  used = send_data(id_adic_intmld, adic_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_dic_intmld .gt. 0) then
+  used = send_data(id_dic_intmld, dic_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_o2_intmld .gt. 0) then
+  used = send_data(id_o2_intmld, o2_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_no3_intmld .gt. 0) then
+  used = send_data(id_no3_intmld, no3_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_fe_intmld .gt. 0) then
+  used = send_data(id_fe_intmld, fe_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_phy_intmld .gt. 0) then
+  used = send_data(id_phy_intmld, phy_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_det_intmld .gt. 0) then
+  used = send_data(id_det_intmld, det_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_pprod_gross_intmld .gt. 0) then
+  used = send_data(id_pprod_gross_intmld, pprod_gross_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_npp_intmld .gt. 0) then
+  used = send_data(id_npp_intmld, npp_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+if (id_radbio_intmld .gt. 0) then
+  used = send_data(id_radbio_intmld, radbio_intmld(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+
+!detritus sinking at 100 m
+if (id_wdet100avg .gt. 0) then
+  used = send_data(id_wdet100avg, wdet100avg(isc:iec,jsc:jec),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+
+! PAR for phytoplankton at surface.
+
+if (id_radbio1 .gt. 0) then
+  used = send_data(id_radbio1, radbio3d(isc:iec,jsc:jec,1),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,1))
+endif
+
+! PAR for phytoplankton at all depths.
+
+if (id_radbio3d .gt. 0) then
+  used = send_data(id_radbio3d, radbio3d(isc:iec,jsc:jec,:),          &
+       time%model_time, rmask = grid%tmask(isc:iec,jsc:jec,:))
 endif
 
 do n = 1, instances  !{
@@ -2023,14 +2168,16 @@ if (atmpress_id .eq. 0) then  !{
        trim(atmpress_file))
 endif  !}
 
-pistonveloc_id = init_external_field(pistonveloc_file,          &
+if (gasx_from_file) then
+   pistonveloc_id = init_external_field(pistonveloc_file,          &
                                      pistonveloc_name,          &
                                      domain = Domain%domain2d)
-if (pistonveloc_id .eq. 0) then  !{
-  call mpp_error(FATAL, trim(error_header) //                   &
+   if (pistonveloc_id .eq. 0) then  !{
+     call mpp_error(FATAL, trim(error_header) //                   &
        'Could not open pistonveloc file: ' //                   &
        trim(pistonveloc_file))
-endif  !}
+   endif  !}
+endif
 
 !RASF I think the ifdafs are redundant
 if (id_adic .ne. 0 .and. .not. use_access_co2) then
@@ -2044,14 +2191,16 @@ if (id_adic .ne. 0 .and. .not. use_access_co2) then
  endif  !}
 endif
 
-seaicefract_id = init_external_field(seaicefract_file,          &
+if (ice_file4gasx) then
+   seaicefract_id = init_external_field(seaicefract_file,          &
                                      seaicefract_name,          &
                                      domain = Domain%domain2d)
-if (seaicefract_id .eq. 0) then  !{
-  call mpp_error(FATAL, trim(error_header) //                   &
+   if (seaicefract_id .eq. 0) then  !{
+     call mpp_error(FATAL, trim(error_header) //                   &
        'Could not open seaicefract file: ' //                   &
        trim(seaicefract_file))
-endif  !}
+   endif  !}
+endif
 
 dust_id = init_external_field(dust_file,          &
                                      dust_name,          &
@@ -2202,6 +2351,65 @@ id_kw_o2 = register_diag_field('ocean_model',                   &
 id_light_limit = register_diag_field('ocean_model','light_limit', &
      grid%tracer_axes(1:2),Time%model_time, 'Integrated light limitation of phytoplankton growth', &
      ' ',missing_value = -1.0e+10)
+
+id_adic_intmld = register_diag_field('ocean_model','adic_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated adic', &
+     ' ',missing_value = -1.0e+10)
+id_dic_intmld = register_diag_field('ocean_model','dic_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated dic', &
+     ' ',missing_value = -1.0e+10)     
+id_o2_intmld = register_diag_field('ocean_model','o2_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated o2', &
+     ' ',missing_value = -1.0e+10)     
+id_no3_intmld = register_diag_field('ocean_model','no3_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated no3', &
+     ' ',missing_value = -1.0e+10)     
+id_fe_intmld = register_diag_field('ocean_model','fe_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated fe', &
+     ' ',missing_value = -1.0e+10)     
+id_phy_intmld = register_diag_field('ocean_model','phy_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated phy', &
+     ' ',missing_value = -1.0e+10)     
+id_det_intmld = register_diag_field('ocean_model','det_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated det', &
+     ' ',missing_value = -1.0e+10)     
+id_pprod_gross_intmld = register_diag_field('ocean_model','pprod_gross_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated pprod_gross', &
+     ' ',missing_value = -1.0e+10)     
+id_npp_intmld = register_diag_field('ocean_model','npp_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated npp', &
+     ' ',missing_value = -1.0e+10)     
+id_radbio_intmld = register_diag_field('ocean_model','radbio_intmld', &
+     grid%tracer_axes(1:2),Time%model_time, 'MLD-integrated radbio', &
+     ' ',missing_value = -1.0e+10)     
+
+id_wdet100avg = register_diag_field('ocean_model','wdet100avg', &
+     grid%tracer_axes(1:2),Time%model_time, 'detritus sinking at 100 m', &
+     ' ',missing_value = -1.0e+10)     
+
+id_radbio1 = register_diag_field('ocean_model','radbio1', &
+     grid%tracer_axes(1:2),Time%model_time, 'Photosynthetically active radiation for phytoplankton growth at surface', &
+     'W m-2',missing_value = -1.0e+10)
+
+id_radbio3d = register_diag_field('ocean_model','radbio3d', &
+     grid%tracer_axes(1:3),Time%model_time, 'Photosynthetically active radiation for phytoplankton growth', &
+     'W m-2',missing_value = -1.0e+10)
+
+id_wdet100 = register_diag_field('ocean_model','wdet100', &
+     grid%tracer_axes(1:2),Time%model_time, 'detritus export at 100 m (det*sinking rate)', &
+     'mmolN/m^2/s',missing_value = -1.0e+10)
+
+id_npp3d = register_diag_field('ocean_model','npp3d', &
+     grid%tracer_axes(1:3),Time%model_time, 'Net primary productivity', &
+     'mmolN/m^3/s',missing_value = -1.0e+10)
+
+id_npp2d = register_diag_field('ocean_model','npp2d', &
+     grid%tracer_axes(1:2),Time%model_time, 'Vertically integrated net primary productivity', &
+     'mmolN/m^2/s',missing_value = -1.0e+10)
+
+id_npp1 = register_diag_field('ocean_model','npp1', &
+     grid%tracer_axes(1:2),Time%model_time, 'Net primary productivity in the first ocean layer', &
+     'mmolN/m^2/s',missing_value = -1.0e+10)
 
 id_pprod_gross = register_diag_field('ocean_model','pprod_gross', &
      grid%tracer_axes(1:3),Time%model_time, 'Gross PHY production', &
